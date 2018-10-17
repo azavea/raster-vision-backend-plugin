@@ -1,0 +1,6 @@
+FROM raster-vision-gpu
+
+COPY ./plugin  /opt/src/plugin
+COPY ./spacenet  /opt/src/spacenet
+
+CMD ["bash"]

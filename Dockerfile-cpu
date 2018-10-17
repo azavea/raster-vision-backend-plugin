@@ -1,0 +1,6 @@
+FROM raster-vision-cpu
+
+COPY ./plugin  /opt/src/plugin
+COPY ./spacenet  /opt/src/spacenet
+
+CMD ["bash"]
