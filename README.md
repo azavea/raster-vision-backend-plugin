@@ -42,7 +42,7 @@ You will also need to set `RASTER_VISION_DATA_DIR` to the directory containing y
 
 ### Running chip classification on Vegas
 
-To drive development of a new chip classification backend, we will use the Vegas example in `plugin/vegas.py`. It allows running all three tasks on the SpaceNet Vegas example. It is modified from the version in the examples repo to use a plugin for the backend when doing classification. You can run this example using something like the following. At the moment, it doesn't generate any real output because the backend is a noop. You may want to read about setting up the Vegas example [here](https://github.com/azavea/raster-vision-examples#spacenet-vegas-road-and-building-semantic-segmentation).
+To drive development of a new chip classification backend, we will use the Vegas example in `spacenet/vegas.py`. It allows running all three tasks on the SpaceNet Vegas example. It is modified from the version in the examples repo to use a backend plugin (in `plugin/noop_backend.py`) when doing classification. See the `build_backend` method to see how this backend is utilized in the experiment configuration. You can run this example using something like the following. At the moment, it doesn't generate any real output because the backend is a noop. You may want to read about setting up the Vegas example [here](https://github.com/azavea/raster-vision-examples#spacenet-vegas-road-and-building-semantic-segmentation).
 ```
 export ROOT_URI=/opt/data/lf-dev/rv-output/vegas-spacenet
 rastervision -p plugin \
@@ -52,4 +52,13 @@ rastervision -p plugin \
     -a root_uri ${ROOT_URI} \
     -a target buildings \
     -a task_type chip_classification
+```
+The `-p plugin` flag is to use a Raster Vision profile called `plugin`. This profile points to the location of the plugin module. You can make such a profile by creating a file at `~/.rastervision/plugin` containing something like:
+```
+[AWS_BATCH]
+job_queue=raster-vision-gpu
+job_definition=raster-vision-gpu
+[PLUGINS]
+files=[]
+modules=["plugin.noop_backend"]
 ```
