@@ -5,7 +5,7 @@ from abc import abstractmethod
 
 import rastervision as rv
 from rastervision.utils.files import list_paths
-from plugin import noop_backend
+from plugin import gluoncv_backend
 
 BUILDINGS = 'buildings'
 ROADS = 'roads'
@@ -47,7 +47,7 @@ class SpacenetConfig(object):
 
 class VegasRoads(SpacenetConfig):
     def __init__(self, use_remote_data):
-        self.base_uri = '/opt/data/AOI_2_Vegas_Roads_Train'
+        self.base_uri = '/opt/data/vegas-spacenet/AOI_2_Vegas_Roads_Train'
         if use_remote_data:
             self.base_uri = 's3://spacenet-dataset/SpaceNet_Roads_Competition/Train/AOI_2_Vegas_Roads_Train'  # noqa
 
@@ -66,7 +66,7 @@ class VegasRoads(SpacenetConfig):
 
 class VegasBuildings(SpacenetConfig):
     def __init__(self, use_remote_data):
-        self.base_uri = '/opt/data/AOI_2_Vegas_Train'
+        self.base_uri = '/opt/data/vegas-spacenet/AOI_2_Vegas_Train'
         if use_remote_data:
             self.base_uri = 's3://spacenet-dataset/SpaceNet_Buildings_Dataset_Round2/spacenetV2_Train/AOI_2_Vegas'  # noqa
 
@@ -246,7 +246,7 @@ def build_backend(task, test):
                                   }, set_missing_keys=True) \
                                   .build()
         '''
-        backend = rv.BackendConfig.builder(noop_backend.NOOP_BACKEND) \
+        backend = rv.BackendConfig.builder(gluoncv_backend.GLUONCV_BACKEND) \
                                   .with_task(task) \
                                   .build()
     elif task.task_type == rv.OBJECT_DETECTION:
@@ -292,7 +292,7 @@ def validate_options(task_type, target):
 
 class SpacenetVegas(rv.ExperimentSet):
     def exp_main(self, root_uri, target=BUILDINGS, use_remote_data=True, test=False,
-                 task_type=rv.SEMANTIC_SEGMENTATION):
+                 task_type=rv.CHIP_CLASSIFICATION):
         """Run an experiment on the Spacenet Vegas road or building dataset.
 
         This is an example of how to do all three tasks on the same dataset.
@@ -313,7 +313,6 @@ class SpacenetVegas(rv.ExperimentSet):
         spacenet_config = SpacenetConfig.create(use_remote_data, target)
         experiment_id = '{}_{}'.format(target, task_type.lower())
         validate_options(task_type, target)
-
         task = build_task(task_type, spacenet_config.get_class_map())
         backend = build_backend(task, test)
         analyzer = rv.AnalyzerConfig.builder(rv.STATS_ANALYZER) \
