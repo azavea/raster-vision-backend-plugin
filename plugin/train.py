@@ -60,14 +60,11 @@ def to_mx(chip):
 
 def build_model(ctx, num_classes):
     """Define and initalize ResNet50v2 model.
-
     Args:
         ctx: (list) context, i.e. a compute environment
         num_classes: (int) number of classes
-
     Returns:
         initialized model
-
     """
     # GluonCV Model build here
     net = get_model('ResNet50_v2', pretrained=True)
@@ -117,14 +114,14 @@ def gluoncv_train(config_dict, model_path):
 
     Args:
         config_path: default dict containing relevant configuration
-                     files, including classes and training_data_dir.
-        model_path: path to which model is saved after each epoch
+                     files, including classes and training_data_dir
+        model_path: path to save model after each epoch
 
     Returns:
         trained model
     """
 
-    epochs = 12
+    epochs = 1
     per_device_batch_size = 32
 
     lr_decay = 0.1

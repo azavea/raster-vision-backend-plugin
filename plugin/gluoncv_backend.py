@@ -3,12 +3,18 @@ import os
 import shutil
 import uuid
 
+import numpy as np
+import mxnet as mx
+
+from mxnet import gluon
+
 from rastervision.backend import Backend
 from rastervision.utils.files import (make_dir, get_local_path, upload_or_copy,
                                       download_if_needed)
 from rastervision.utils.misc import save_img
+from rastervision.data import ChipClassificationLabels
 
-from plugin.train import gluoncv_train
+from plugin.train import (build_model, gpu_enabled, gluoncv_train)
 
 
 class FileGroup(object):
@@ -216,8 +222,53 @@ class GluonCVBackend(Backend):
 
         upload_or_copy(self.model_path, model_files.model_uri)
 
-    def load_model(self, tmp_dir):
-        pass
+    def load_model(self, tmp_dir, ctx=None):
+        """Load ResNet50v2 and load trained weights.
+
+        Args:
+            tmp_dir: temporary directory
+
+        Returns:
+            None
+        """
+        if self.model is None:
+            self.model = build_model(ctx, len(self.class_map))
+            model_files = ModelFiles(self.config.training_output_uri, tmp_dir)
+            model_path = download_if_needed(model_files.model_uri, tmp_dir)
+            self.model.load_parameters(model_path)
 
     def predict(self, chips, windows, tmp_dir):
-        pass
+        """Predict on a set of chips and return a ChipClassificationLabels
+           object with class and probabilities.
+
+        Args:
+            chips: 300x300 jpgs
+            windows: list of int
+            tmp_dir: temporary directory
+
+        Returns:
+            labels and probabilities
+        """
+        # set compute environment depending on gpu availability
+        ctx = [mx.gpu(0)] if gpu_enabled() else [mx.cpu(0)]
+
+        # ensure model is loaded
+        self.load_model(tmp_dir, ctx)
+
+        # reshape the data to be consistent with how the model was trained
+        data = np.transpose(chips, (0, 3, 2, 1))
+
+        # load data onto gpu/cpu, depending on context
+        data = gluon.utils.split_and_load(data, ctx)
+
+        # get list of predictions from the model. also convert to np ndarray
+        # because that is what raster vision expects
+        probs = [self.model(X).asnumpy() for X in data]
+
+        labels = ChipClassificationLabels()
+        for chip_probs, window in zip(probs[0], windows):
+            # Add 1 to class_id since they start at 1.
+            class_id = int(np.argmax(chip_probs) + 1)
+            labels.set_cell(window, class_id, chip_probs)
+
+        return labels
