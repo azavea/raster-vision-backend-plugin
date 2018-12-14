@@ -3,4 +3,13 @@ FROM raster-vision-gpu
 COPY ./plugin  /opt/src/plugin
 COPY ./spacenet  /opt/src/spacenet
 
+# Install MXNet, GluonCV APIs
+RUN pip install mxnet-cu90 --pre
+RUN pip install gluoncv --pre
+
+# The following two lines were added to ensure that CUDA interacts properly
+# with MXNet. At this time, I've forgotten where I found this fix.
+RUN sh -c "echo '/usr/local/cuda/lib64\n/usr/local/cuda/lib' >> /etc/ld.so.conf.d/nvidia.conf"
+RUN ldconfig
+
 CMD ["bash"]

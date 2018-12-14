@@ -5,7 +5,7 @@ from abc import abstractmethod
 
 import rastervision as rv
 from rastervision.utils.files import list_paths
-from plugin import noop_backend
+from plugin import gluoncv_config
 
 BUILDINGS = 'buildings'
 ROADS = 'roads'
@@ -34,7 +34,8 @@ class SpacenetConfig(object):
     def get_scene_ids(self):
         label_dir = os.path.join(self.base_uri, self.label_dir)
         label_paths = list_paths(label_dir, ext='.geojson')
-        label_re = re.compile(r'.*{}(\d+)\.geojson'.format(self.label_fn_prefix))
+        label_re = re.compile(r'.*{}(\d+)\.geojson'
+                              .format(self.label_fn_prefix))
         scene_ids = [
             label_re.match(label_path).group(1)
             for label_path in label_paths]
@@ -47,7 +48,7 @@ class SpacenetConfig(object):
 
 class VegasRoads(SpacenetConfig):
     def __init__(self, use_remote_data):
-        self.base_uri = '/opt/data/AOI_2_Vegas_Roads_Train'
+        self.base_uri = '/opt/data/vegas-spacenet/AOI_2_Vegas_Roads_Train'
         if use_remote_data:
             self.base_uri = 's3://spacenet-dataset/SpaceNet_Roads_Competition/Train/AOI_2_Vegas_Roads_Train'  # noqa
 
@@ -66,7 +67,7 @@ class VegasRoads(SpacenetConfig):
 
 class VegasBuildings(SpacenetConfig):
     def __init__(self, use_remote_data):
-        self.base_uri = '/opt/data/AOI_2_Vegas_Train'
+        self.base_uri = '/opt/data/vegas-spacenet/AOI_2_Vegas_Train'
         if use_remote_data:
             self.base_uri = 's3://spacenet-dataset/SpaceNet_Buildings_Dataset_Round2/spacenetV2_Train/AOI_2_Vegas'  # noqa
 
@@ -96,27 +97,31 @@ def build_scene(task, spacenet_config, id, channel_order=None):
     if task.task_type == rv.SEMANTIC_SEGMENTATION:
         background_class_id = 2
         line_buffer = 15
-        label_raster_source = rv.RasterSourceConfig.builder(rv.GEOJSON_SOURCE) \
+        label_raster_source = rv.RasterSourceConfig.builder(rv.GEOJSON_SOURCE)\
             .with_uri(label_source_uri) \
-            .with_rasterizer_options(background_class_id, line_buffer=line_buffer) \
+            .with_rasterizer_options(background_class_id,
+                                     line_buffer=line_buffer) \
             .build()
 
-        label_source = rv.LabelSourceConfig.builder(rv.SEMANTIC_SEGMENTATION_RASTER) \
+        label_source = rv.LabelSourceConfig \
+            .builder(rv.SEMANTIC_SEGMENTATION_RASTER) \
             .with_raster_source(label_raster_source) \
             .build()
     elif task.task_type == rv.CHIP_CLASSIFICATION:
-        label_source = rv.LabelSourceConfig.builder(rv.CHIP_CLASSIFICATION_GEOJSON) \
-                                           .with_uri(label_source_uri) \
-                                           .with_ioa_thresh(0.01) \
-                                           .with_use_intersection_over_cell(True) \
-                                           .with_pick_min_class_id(True) \
-                                           .with_background_class_id(2) \
-                                           .with_infer_cells(True) \
-                                           .build()
+        label_source = rv.LabelSourceConfig \
+            .builder(rv.CHIP_CLASSIFICATION_GEOJSON) \
+            .with_uri(label_source_uri) \
+            .with_ioa_thresh(0.01) \
+            .with_use_intersection_over_cell(True) \
+            .with_pick_min_class_id(True) \
+            .with_background_class_id(2) \
+            .with_infer_cells(True) \
+            .build()
     elif task.task_type == rv.OBJECT_DETECTION:
-        label_source = rv.LabelSourceConfig.builder(rv.OBJECT_DETECTION_GEOJSON) \
-                                           .with_uri(label_source_uri) \
-                                           .build()
+        label_source = rv.LabelSourceConfig \
+            .builder(rv.OBJECT_DETECTION_GEOJSON) \
+            .with_uri(label_source_uri) \
+            .build()
 
     scene = rv.SceneConfig.builder() \
                           .with_task(task) \
@@ -131,7 +136,8 @@ def build_scene(task, spacenet_config, id, channel_order=None):
 def build_dataset(task, spacenet_config, test):
     scene_ids = spacenet_config.get_scene_ids()
     if len(scene_ids) == 0:
-        raise ValueError('No scenes found. Something is configured incorrectly.')
+        raise ValueError('No scenes found. '
+                         'Something is configured incorrectly.')
     random.seed(5678)
     random.shuffle(scene_ids)
     split_ratio = 0.8
@@ -139,11 +145,11 @@ def build_dataset(task, spacenet_config, test):
     train_ids = scene_ids[0:num_train_ids]
     val_ids = scene_ids[num_train_ids:]
 
-    num_train_scenes = len(train_ids)
-    num_val_scenes = len(val_ids)
+    num_train_scenes = len(train_ids)-1
+    num_val_scenes = len(val_ids)-1
     if test:
-        num_train_scenes = 16
-        num_val_scenes = 4
+        num_train_scenes = 9
+        num_val_scenes = 3
     train_ids = train_ids[0:num_train_scenes]
     val_ids = val_ids[0:num_val_scenes]
     channel_order = [0, 1, 2]
@@ -173,7 +179,7 @@ def build_task(task_type, class_map):
                             .build()
     elif task_type == rv.CHIP_CLASSIFICATION:
         task = rv.TaskConfig.builder(rv.CHIP_CLASSIFICATION) \
-                    .with_chip_size(200) \
+                    .with_chip_size(300) \
                     .with_classes(class_map) \
                     .build()
     elif task_type == rv.OBJECT_DETECTION:
@@ -198,8 +204,8 @@ def build_backend(task, test):
         batch_size = 8
         num_steps = 1e6
         if test:
-            num_steps = 1
-            batch_size = 1
+            num_steps = 16
+            batch_size = 4
 
         backend = rv.BackendConfig.builder(rv.TF_DEEPLAB) \
                                   .with_task(task) \
@@ -209,52 +215,15 @@ def build_backend(task, test):
                                   .with_debug(debug) \
                                   .build()
     elif task.task_type == rv.CHIP_CLASSIFICATION:
-        '''
-        batch_size = 8
-        num_epochs = 40
-        if test:
-            num_epochs = 1
-            batch_size = 1
-
-        backend = rv.BackendConfig.builder(rv.KERAS_CLASSIFICATION) \
-                                  .with_task(task) \
-                                  .with_model_defaults(rv.RESNET50_IMAGENET) \
-                                  .with_debug(debug) \
-                                  .with_train_options(replace_model=True) \
-                                  .with_batch_size(batch_size) \
-                                  .with_num_epochs(num_epochs) \
-                                  .with_config({
-                                      "trainer": {
-                                          "options": {
-                                              "saveBest": True,
-                                              "lrSchedule": [
-                                                  {
-                                                      "epoch": 0,
-                                                      "lr": 0.0005
-                                                  },
-                                                  {
-                                                      "epoch": 15,
-                                                      "lr": 0.0001
-                                                  },
-                                                  {
-                                                      "epoch": 30,
-                                                      "lr": 0.00001
-                                                  }
-                                              ]
-                                          }
-                                      }
-                                  }, set_missing_keys=True) \
-                                  .build()
-        '''
-        backend = rv.BackendConfig.builder(noop_backend.NOOP_BACKEND) \
+        backend = rv.BackendConfig.builder(gluoncv_config.GLUONCV_BACKEND) \
                                   .with_task(task) \
                                   .build()
     elif task.task_type == rv.OBJECT_DETECTION:
         batch_size = 8
         num_steps = 1e6
         if test:
-            num_steps = 1
-            batch_size = 1
+            num_steps = 16
+            batch_size = 4
 
         backend = rv.BackendConfig.builder(rv.TF_OBJECT_DETECTION) \
             .with_task(task) \
@@ -287,12 +256,13 @@ def validate_options(task_type, target):
 
     if target == ROADS:
         if task_type in [rv.CHIP_CLASSIFICATION, rv.OBJECT_DETECTION]:
-            raise ValueError('{} is not valid task_type for target="roads"'.format(task))
+            raise ValueError('{} is not valid task_type '
+                             'for target="roads"'.format(task_type))
 
 
 class SpacenetVegas(rv.ExperimentSet):
-    def exp_main(self, root_uri, target=BUILDINGS, use_remote_data=True, test=False,
-                 task_type=rv.SEMANTIC_SEGMENTATION):
+    def exp_main(self, root_uri, target=BUILDINGS, use_remote_data=True,
+                 test=False, task_type=rv.CHIP_CLASSIFICATION):
         """Run an experiment on the Spacenet Vegas road or building dataset.
 
         This is an example of how to do all three tasks on the same dataset.
@@ -300,12 +270,12 @@ class SpacenetVegas(rv.ExperimentSet):
         Args:
             root_uri: (str): root of where to put output
             target: (str) 'buildings' or 'roads'
-            use_remote_data: (bool or str) if True or 'True', then use data from S3,
-                else local
-            test: (bool or str) if True or 'True', run a very small experiment as a
-                test and generate debug output
-            task_type: (str) valid options are semantic_segmentation, object_detection,
-                and chip_classification
+            use_remote_data: (bool or str) if True or 'True', then use data
+                from S3, else local
+            test: (bool or str) if True or 'True', run a very small experiment
+                as a test and generate debug output
+            task_type: (str) valid options are semantic_segmentation,
+                object_detection, and chip_classification
         """
         test = str_to_bool(test)
         task_type = task_type.upper()
@@ -313,13 +283,11 @@ class SpacenetVegas(rv.ExperimentSet):
         spacenet_config = SpacenetConfig.create(use_remote_data, target)
         experiment_id = '{}_{}'.format(target, task_type.lower())
         validate_options(task_type, target)
-
         task = build_task(task_type, spacenet_config.get_class_map())
         backend = build_backend(task, test)
         analyzer = rv.AnalyzerConfig.builder(rv.STATS_ANALYZER) \
                                     .build()
         dataset = build_dataset(task, spacenet_config, test)
-
         # Need to use stats_analyzer because imagery is uint16.
         experiment = rv.ExperimentConfig.builder() \
                                         .with_id(experiment_id) \
